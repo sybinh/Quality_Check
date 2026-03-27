@@ -1,4 +1,4 @@
-# Quick Setup Guide - New Machine
+﻿# Quick Setup Guide - New Machine
 
 ## Step 1: Extract Package
 Extract all files to your workspace folder.

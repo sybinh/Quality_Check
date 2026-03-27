@@ -1,4 +1,4 @@
-# Excel to Java Rules Mapping
+﻿# Excel to Java Rules Mapping
 
 **Purpose**: Map official Excel rules to implemented Java rules from POST Tool
 **Strategy**: Implement only rules with both Excel (official process) AND Java (proven code) backing

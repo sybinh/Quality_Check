@@ -1,4 +1,4 @@
-# RQ1 Rules - Complete Reference
+﻿# RQ1 Rules - Complete Reference
 
 **Total Rules**: 101 (BBM 23 + QAM 22 + IPT 56)
 **Source**: SW_QAMRuleSet_Tmplt.xlsm v3.8 (2022-07-06)

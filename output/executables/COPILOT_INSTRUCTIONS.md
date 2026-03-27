@@ -1,4 +1,4 @@
-# Using RQ1 PRPL Validator with GitHub Copilot
+﻿# Using RQ1 PRPL Validator with GitHub Copilot
 
 ## Overview
 

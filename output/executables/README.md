@@ -1,4 +1,4 @@
-# RQ1 PRPL Validation Tool
+ï»¿# RQ1 PRPL Validation Tool
 
 **Version 1.2** - Automated validation for 12 PRPL rules with password caching
 
@@ -87,7 +87,7 @@ See `COPILOT_INSTRUCTIONS.md` for details.
 
 ### Pass Rate
 ```
-Pass Rate = (Total - WARNING violations) / Total × 100%
+Pass Rate = (Total - WARNING violations) / Total  100%
 ```
 
 ### Example Output

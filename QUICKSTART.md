@@ -1,4 +1,4 @@
-# RQ1 PRPL Validator - Quick Start Guide
+﻿# RQ1 PRPL Validator - Quick Start Guide
 
 ## ?? What You Get
 

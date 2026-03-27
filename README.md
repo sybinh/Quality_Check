@@ -1,4 +1,4 @@
-# RQ1 PRPL Validation Tool
+﻿# RQ1 PRPL Validation Tool
 
 **Version 1.2** - Automated validation tool for RQ1 PRPL (Planning Quality Assurance) rules with MCP (Model Context Protocol) server integration.
 

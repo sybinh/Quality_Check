@@ -1,4 +1,4 @@
-# Implementation Guide
+﻿# Implementation Guide
 
 **Project**: PQA_Agent - RQ1 Rule Validation MCP Server
 **Language**: Python

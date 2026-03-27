@@ -1,4 +1,4 @@
-# PQA Validator - VS Code Setup Guide
+﻿# PQA Validator - VS Code Setup Guide
 
 ## For VS Code Users Only
 

@@ -1,4 +1,4 @@
-# PQA Validator - Installation Guide
+﻿# PQA Validator - Installation Guide
 
 ## For End Users
 
