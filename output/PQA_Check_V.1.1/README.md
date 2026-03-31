@@ -1,6 +1,6 @@
-# RQ1 PRPL Validation Tool
+# Quality Check
 
-**Version 1.1** - Bug fixes for Rule 14 and Rule 18 detection
+**Version 1.1** - Bug fixes for Rule 14 and Rule 18 detection + 3 additional QAMi rules
 
 ---
 
@@ -39,7 +39,7 @@ Copy-Item .env.example .env
 
 ---
 
-## 12 PRPL Rules
+## 12 QAMi Rules (PRPL)
 
 | Rule ID | Description |
 |---------|-------------|
@@ -134,5 +134,6 @@ VIOLATIONS FOUND (2)
 
 | Version | Changes |
 |---------|---------|
-| **V.1.1** | Fixed Rule 14 (hasParent lazy load), Rule 18 (pagination + XML parse), auto dotenv load |
-| **V.1.0** | Initial release - 12 PRPL rules implemented |
+
+| **V.1.0** | Initial release - 9 QAMi (PRPL) rules |
+| **V.1.1** | Add PRPL 06, 14, 18 - defect attributes, ISW commitment tracking. Bug fixes Rule 14 and 18 |
