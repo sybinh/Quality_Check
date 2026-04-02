@@ -207,18 +207,37 @@ def validate_user_items(target_username: str, login_username: str = None):
                 'cq__Type': issue_cq_type,
                 'category': issue_category,
                 'submitdate': getattr(issue, 'submitdate', None),
-                'uri': getattr(issue, 'uri', None),
-                # Defect Detection Attributes (for PRPL 06)
-                'defectdetectionlocation': getattr(issue, 'defectdetectionlocation', None),
-                'defectdetectionprocess': getattr(issue, 'defectdetectionprocess', None),
-                'defectdetectionorga': getattr(issue, 'defectdetectionorga', None),
-                'defectdetectiondate': getattr(issue, 'defectdetectiondate', None),
-                # Defect Correction Attributes (for PRPL 06)
-                'defectiveworkproducttype': getattr(issue, 'defectiveworkproducttype', None),
-                'defectclassification': getattr(issue, 'defectclassification', None),
-                'defectinjectionorga': getattr(issue, 'defectinjectionorga', None),
-                'defectinjectiondate': getattr(issue, 'defectinjectiondate', None)
+                'uri': getattr(issue, 'uri', None)
             }
+            
+            # PRPL 06: Fetch defect attributes only for IFD with Category=Defect (separate query)
+            if is_ifd and issue_category == 'Defect':
+                defect_query = client.query(
+                    Issue,
+                    where=(IssueProperty.id == getattr(issue, 'id', '')),
+                    select=[
+                        IssueProperty.defectdetectionlocation,
+                        IssueProperty.defectdetectionprocess,
+                        IssueProperty.defectdetectionorga,
+                        IssueProperty.defectdetectiondate,
+                        IssueProperty.defectiveworkproducttype,
+                        IssueProperty.defectclassification,
+                        IssueProperty.defectinjectionorga,
+                        IssueProperty.defectinjectiondate
+                    ]
+                )
+                if defect_query.members:
+                    d = defect_query.members[0]
+                    issue_data.update({
+                        'defectdetectionlocation': getattr(d, 'defectdetectionlocation', None),
+                        'defectdetectionprocess': getattr(d, 'defectdetectionprocess', None),
+                        'defectdetectionorga': getattr(d, 'defectdetectionorga', None),
+                        'defectdetectiondate': getattr(d, 'defectdetectiondate', None),
+                        'defectiveworkproducttype': getattr(d, 'defectiveworkproducttype', None),
+                        'defectclassification': getattr(d, 'defectclassification', None),
+                        'defectinjectionorga': getattr(d, 'defectinjectionorga', None),
+                        'defectinjectiondate': getattr(d, 'defectinjectiondate', None)
+                    })
             
             # PRPL 03: Check for Conflicted state
             rule03 = Rule_Conflicted_State(issue_data, "Issue")

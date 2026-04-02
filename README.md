@@ -8,6 +8,23 @@ This tool validates RQ1 items (BC, IFD, Release, Workitem) against 12 PRPL busin
 
 **Supported Rules**: PRPL 01, 02, 03, 06, 07, 11, 12, 13, 14, 15, 16, 18
 
+### 12 PRPL Rules Implemented
+
+| Rule ID | Description |
+|---------|-------------|
+| **PRPL 01** | BC-R is not in requested state, 8 weeks before PVER planned delivery date |
+| **PRPL 02** | Workitem is in started state, but planned date for workitem is not entered in planning tab |
+| **PRPL 03** | Issue/Release/workitem is still in "Conflicted" state |
+| **PRPL 06** | Not all fields for defect detection/injection attributes in a Bug Fix Issue (IFD) are filled |
+| **PRPL 07** | Planned date of BC later than requested delivery date of any mapped PVER or PVAR |
+| **PRPL 11** | IFD 5 day SLA reached |
+| **PRPL 12** | IFD is not closed, even though all the BC-Rs mapped to it are closed or cancelled |
+| **PRPL 13** | IFD is not implemented or closed, after planned dated of BC-R |
+| **PRPL 14** | IFD is not committed, eventhough attached Issue-SW is committed |
+| **PRPL 15** | Release is not closed after planned date for BC and FC |
+| **PRPL 16** | Workitem is not closed after planned date |
+| **PRPL 18** | I-FD not committed 5 or more working days after attached I-SW was committed |
+
 **Target Rule Sets**: QAM, QAMi, BBM (IPT rules are candidate for future extension)
 
 ## Status
