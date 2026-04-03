@@ -153,7 +153,8 @@ def validate_user_items(target_username: str, login_username: str = None):
     
     violations = []
     total_checks = 0
-    
+    workitem_query = type('obj', (object,), {'members': []})()  # safe default if query fails
+
     # Count items by type
     issue_counts = {'IFD': 0, 'ISW': 0, 'Other': 0}
     release_counts = {'BC': 0, 'BX': 0, 'FC': 0, 'PVER': 0, 'PVAR': 0, 'Other': 0}
@@ -761,10 +762,10 @@ def validate_user_items(target_username: str, login_username: str = None):
     print(f"{'='*80}")
     total_issues = sum(issue_counts.values())
     total_releases = sum(release_counts.values())
-    print(f"Total items assigned: {total_issues + total_releases + len(workitem_query.members) if 'workitem_query' in locals() else 0}")
+    print(f"Total items assigned: {total_issues + total_releases + len(workitem_query.members)}")
     print(f"  - Issues: {total_issues} ({', '.join([f'{k}={v}' for k, v in issue_counts.items() if v > 0])})")
     print(f"  - Releases: {total_releases} ({', '.join([f'{k}={v}' for k, v in release_counts.items() if v > 0])})")
-    print(f"  - Workitems: {len(workitem_query.members) if 'workitem_query' in locals() else 0}")
+    print(f"  - Workitems: {len(workitem_query.members)}")
     print(f"Total checks performed: {total_checks}")
     print(f"Rules applied: PRPL 01, 02, 03, 06, 07, 11, 12, 13, 14, 15, 16, 18")
     
@@ -796,7 +797,7 @@ def validate_user_items(target_username: str, login_username: str = None):
             'PRPL 12': 'IFD is not closed, even though all the BC-Rs mapped to it are closed or cancelled',
             'PRPL 13': 'IFD is not implemented or closed, after planned dated of BC-R',
             'PRPL 14': 'IFD is not committed, eventhough attached Issue-SW is committed',
-            'PRPL 15': 'Release is not closed after planned date for BC and FC',
+            'PRPL 15': 'Release is not closed after planned date',
             'PRPL 16': 'Workitem is not closed after planned date',
             'PRPL 18': 'I-FD not committed 5 or more working days after attached I-SW was committed'
         }
