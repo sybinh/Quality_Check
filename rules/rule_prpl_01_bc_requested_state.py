@@ -61,6 +61,15 @@ class Rule_BC_RequestedState:
         bc_title = self.bc.get('dcterms__title', '')
         bc_state = self.bc.get('lifecyclestate', '')
         
+        # Skip Conflicted items — under clarification, not subject to PRPL checks
+        if bc_state == 'Conflicted':
+            return RuleResult(
+                rule_id="PRPL 01",
+                passed=True,
+                severity="INFO",
+                description=f"BC {bc_id} is in Conflicted state - skipped"
+            )
+
         # If BC already in Requested state or later (Developed, Closed, Cancelled), pass
         if bc_state in ['Requested', 'Developed', 'Planned', 'Closed', 'Canceled']:
             return RuleResult(

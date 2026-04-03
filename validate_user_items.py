@@ -157,6 +157,7 @@ def validate_user_items(target_username: str, login_username: str = None):
     # Count items by type
     issue_counts = {'IFD': 0, 'ISW': 0, 'Other': 0}
     release_counts = {'BC': 0, 'BX': 0, 'FC': 0, 'PVER': 0, 'PVAR': 0, 'Other': 0}
+    parent_release_cache = {}
     
     # Query Issues and validate IFD rules
     print("[1] Querying Issues (all types: IFD, ISW)...")
@@ -547,7 +548,7 @@ def validate_user_items(target_username: str, login_username: str = None):
                 )
                 
                 # Build PST mappings directly from RRM (no need to fetch PVER/PVAR)
-                pver_mappings = []  # For PRPL 01 (empty for now - would need PVER/PVAR fetch)
+                pver_mappings = []  # For PRPL 01 (PVER/PVAR planned date based)
                 pst_mappings = []   # For PRPL 07 (built from RRM)
                 
                 for rrm in rrm_query.members:
@@ -555,6 +556,65 @@ def validate_user_items(target_username: str, login_username: str = None):
                     rrm_id = getattr(rrm, 'id', 'N/A')
                     requested_delivery_date = getattr(rrm, 'requesteddeliverydate', None)
                     parent_uri_obj = getattr(rrm, 'hasmappedparentrelease', None)
+                    added_prpl01_mapping = False  # track whether we got real PVER/PVAR data
+
+                    # Build PRPL 01 input by loading mapped parent release (PVER/PVAR)
+                    if parent_uri_obj:
+                        parent_uri_str = str(parent_uri_obj)
+                        parent_data = parent_release_cache.get(parent_uri_str)
+
+                        if parent_data is None:
+                            try:
+                                try:
+                                    parent_release_ref = reference(parent_uri_obj)
+                                except Exception:
+                                    parent_release_ref = parent_uri_obj
+
+                                parent_query = client.query(
+                                    Release,
+                                    where=(ReleaseProperty.uri == parent_release_ref),
+                                    select=[
+                                        ReleaseProperty.id,
+                                        ReleaseProperty.dcterms__title,
+                                        ReleaseProperty.cq__Type,
+                                        ReleaseProperty.planneddate
+                                    ],
+                                    page_size=1
+                                )
+
+                                if parent_query.members:
+                                    parent_release = parent_query.members[0]
+                                    parent_data = {
+                                        'id': getattr(parent_release, 'id', None),
+                                        'title': getattr(parent_release, 'dcterms__title', ''),
+                                        'type': getattr(parent_release, 'cq__Type', ''),
+                                        'planneddate': getattr(parent_release, 'planneddate', None)
+                                    }
+                                else:
+                                    parent_data = {}
+                            except Exception:
+                                parent_data = {}
+
+                            parent_release_cache[parent_uri_str] = parent_data
+
+                        parent_type = parent_data.get('type', '') if parent_data else ''
+                        if parent_type in ['PVER', 'PVAR']:
+                            pver_mappings.append(PverMapping(
+                                pver_id=parent_data.get('id', 'UNKNOWN'),
+                                pver_title=parent_data.get('title', ''),
+                                pver_type=parent_type,
+                                planned_date=parent_data.get('planneddate')
+                            ))
+                            added_prpl01_mapping = True
+
+                    # Fallback: use RRM requested delivery date when parent release details are unavailable
+                    if (not added_prpl01_mapping) and requested_delivery_date:
+                        pver_mappings.append(PverMapping(
+                            pver_id=f"RRM-{rrm_id}",
+                            pver_title="Mapped PST from RRM",
+                            pver_type='PST',
+                            planned_date=requested_delivery_date
+                        ))
                     
                     # Get parent ID from URI if available
                     pst_id = f"RRM-{rrm_id}"  # Use RRM ID as identifier
