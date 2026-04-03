@@ -282,45 +282,44 @@ def validate_user_items(target_username: str, login_username: str = None):
                         'description': result11.description
                     })
                 
-                # PRPL 14 & 18: IFD-ISW Commitment checks (only for IFD)
-                if is_ifd:
-                    parent_isw_data = None
-                    hasparent = getattr(issue, 'hasparent', None)
-                    
-                    if hasparent:
-                        # hasparent is a fully populated Issue object (via nested select)
-                        # No separate HTTP call needed
-                        parent_isw_data = {
-                            'id': getattr(hasparent, 'id', 'UNKNOWN'),
-                            'lifecyclestate': getattr(hasparent, 'lifecyclestate', ''),
-                            'uri': getattr(hasparent, 'uri', None)
-                        }
-                    
-                    # PRPL 14: IFD not committed when ISW committed
-                    rule14 = Rule_IFD_ISW_Commitment(issue_data, parent_isw_data)
-                    result14 = rule14.execute()
-                    total_checks += 1
-                    if not result14.passed:
-                        violations.append({
-                            'rule': 'PRPL 14',
-                            'severity': result14.severity,
-                            'item_id': issue.id,
-                            'item_title': issue.dcterms__title,
-                            'description': result14.description
-                        })
-                    
-                    # PRPL 18: IFD not committed 5+ working days after ISW committed
-                    rule18 = Rule_IFD_ISW_Commitment_Delay(issue_data, parent_isw_data, client=client)
-                    result18 = rule18.execute()
-                    total_checks += 1
-                    if not result18.passed:
-                        violations.append({
-                            'rule': 'PRPL 18',
-                            'severity': result18.severity,
-                            'item_id': issue.id,
-                            'item_title': issue.dcterms__title,
-                            'description': result18.description
-                        })
+                # PRPL 14 & 18: IFD-ISW Commitment checks
+                parent_isw_data = None
+                hasparent = getattr(issue, 'hasparent', None)
+                
+                if hasparent:
+                    # hasparent is a fully populated Issue object (via nested select)
+                    # No separate HTTP call needed
+                    parent_isw_data = {
+                        'id': getattr(hasparent, 'id', 'UNKNOWN'),
+                        'lifecyclestate': getattr(hasparent, 'lifecyclestate', ''),
+                        'uri': getattr(hasparent, 'uri', None)
+                    }
+                
+                # PRPL 14: IFD not committed when ISW committed
+                rule14 = Rule_IFD_ISW_Commitment(issue_data, parent_isw_data)
+                result14 = rule14.execute()
+                total_checks += 1
+                if not result14.passed:
+                    violations.append({
+                        'rule': 'PRPL 14',
+                        'severity': result14.severity,
+                        'item_id': issue.id,
+                        'item_title': issue.dcterms__title,
+                        'description': result14.description
+                    })
+                
+                # PRPL 18: IFD not committed 5+ working days after ISW committed
+                rule18 = Rule_IFD_ISW_Commitment_Delay(issue_data, parent_isw_data, client=client)
+                result18 = rule18.execute()
+                total_checks += 1
+                if not result18.passed:
+                    violations.append({
+                        'rule': 'PRPL 18',
+                        'severity': result18.severity,
+                        'item_id': issue.id,
+                        'item_title': issue.dcterms__title,
+                        'description': result18.description
+                    })
             
             # Only validate IFD type for PRPL 12/13
             if not is_ifd:
