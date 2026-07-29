@@ -145,7 +145,7 @@ class Rule_IFD_ISW_Commitment_Delay:
             from rq1.models import HistorylogProperty
             from rq1.base import reference
 
-            # Query Historylog records for the ISW (paging=True to get all entries)
+            # Query Historylog records for the ISW
             logs_query = self.client.query(
                 Historylog,
                 where=(HistorylogProperty.belongstoissue == reference(self.parent_isw_uri)),
@@ -153,30 +153,24 @@ class Rule_IFD_ISW_Commitment_Delay:
                     HistorylogProperty.lastmodifieddate,
                     HistorylogProperty.historylog
                 ],
-                paging=True,
-                page_size=100
+                page_size=500
             )
 
-            # Iterate through all pages to find LifeCycleState ? Committed
-            page = logs_query
-            while page is not None:
-                for log in page.members:
-                    xml_content = getattr(log, 'historylog', None)
-                    if not xml_content:
-                        continue
+            # Iterate entries to find LifeCycleState -> Committed
+            for log in logs_query.members:
+                xml_content = getattr(log, 'historylog', None)
+                if not xml_content:
+                    continue
 
-                    new_state = self._parse_historylog_xml(xml_content, 'LifeCycleState')
-                    if new_state == LifeCycleState_Issue.COMMITTED.value:
-                        committed_datetime = getattr(log, 'lastmodifieddate', None)
-                        if committed_datetime:
-                            if isinstance(committed_datetime, datetime):
-                                committed_date = committed_datetime.date()
-                            else:
-                                committed_date = datetime.fromisoformat(str(committed_datetime)).date()
-                            return (committed_date, f"ISW committed on {committed_date}")
-
-                # Fetch next page if available
-                page = self.client.get_next_query_page(page)
+                new_state = self._parse_historylog_xml(xml_content, 'LifeCycleState')
+                if new_state == LifeCycleState_Issue.COMMITTED.value:
+                    committed_datetime = getattr(log, 'lastmodifieddate', None)
+                    if committed_datetime:
+                        if isinstance(committed_datetime, datetime):
+                            committed_date = committed_datetime.date()
+                        else:
+                            committed_date = datetime.fromisoformat(str(committed_datetime)).date()
+                        return (committed_date, f"ISW committed on {committed_date}")
 
             return (None, "ISW committed but no commit date found in history")
 
@@ -278,16 +272,19 @@ class Rule_IFD_ISW_Commitment_Delay:
             f"parent ISW {self.parent_isw_id} committed (SLA: {self.SLA_WORKING_DAYS} days)"
         )
         
+        isw_date_str = isw_committed_date.strftime('%Y-%m-%d')
+        days_exceeded = days_since_isw_committed - self.SLA_WORKING_DAYS
+
         details = (
             f"IFD {self.ifd_id} commitment SLA exceeded.\n"
             f"Title: {self.ifd_title}\n"
             f"IFD state: {self.ifd_state}\n"
             f"Parent ISW: {self.parent_isw_id}\n"
             f"Parent ISW state: {self.parent_isw_state}\n"
-            f"ISW committed: {isw_committed_date}\n"
+            f"ISW committed: {isw_date_str}\n"
             f"Working days since ISW committed: {days_since_isw_committed} days\n"
-            f"SLA: {self.SLA_WORKING_DAYS} working days\n\n"
-            f"Hint: Commit IFD {self.ifd_id} immediately (SLA exceeded by {days_since_isw_committed - self.SLA_WORKING_DAYS} days)."
+            f"SLA: {self.SLA_WORKING_DAYS} working days\n"
+            f"Hint: Commit IFD {self.ifd_id} immediately (SLA exceeded by {days_exceeded} days)."
         )
         
         return ValidationResult(
