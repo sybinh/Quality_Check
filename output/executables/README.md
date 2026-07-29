@@ -1,169 +1,250 @@
 ﻿# Quality Check Tool
 
-**Version 1.3** - Automated validation for 12 PRPL rules with password caching
+Version 1.4 — Automated validation for 12 PRPL rules against RQ1 items.
 
 ---
 
-## Quick Start (30 seconds)
+## Table of Contents
 
-```powershell
-# 1. Configure .env file
-RQ1_USER=your_username
+1. [Quick Start](#quick-start)
+2. [Configuration](#configuration)
+3. [Usage](#usage)
+4. [CLI Reference](#cli-reference)
+5. [Rules](#rules)
+6. [Output](#output)
+7. [Error Codes](#error-codes)
+8. [Troubleshooting](#troubleshooting)
+9. [Changelog](#changelog)
+10. [Files Included](#files-included)
+
+---
+
+## Quick Start
+
+1. Copy `.env.example` to `.env` and fill in your details:
+
+```ini
+RQ1_USER=your_ntid
 RQ1_PROJECT_IDS=RQONE00001940
-
-# 2. Run validation (recommended - auto password caching)
-.\validate.ps1 <NTID>
-# First time: Enter password once
-# Later runs: Uses cached password automatically
 ```
 
----
+2. Run validation:
 
-## 12 PRPL Rules
-
-| Rule ID | Description |
-|---------|-------------|
-| **PRPL 01** | BC-R is not in requested state, 8 weeks before PVER planned delivery date |
-| **PRPL 02** | Workitem is in started state, but planned date for workitem is not entered in planning tab |
-| **PRPL 03** | Issue/Release/workitem is still in "Conflicted" state |
-| **PRPL 06** | Not all fields for defect detection/injection attributes in a Bug Fix Issue (IFD) are filled |
-| **PRPL 07** | Planned date of BC later than requested delivery date of any mapped PVER or PVAR |
-| **PRPL 11** | IFD 5 day SLA reached |
-| **PRPL 12** | IFD is not closed, even though all the BC-Rs mapped to it are closed or cancelled |
-| **PRPL 13** | IFD is not implemented or closed, after planned dated of BC-R |
-| **PRPL 14** | IFD is not committed, eventhough attached Issue-SW is committed |
-| **PRPL 15** | Release is not closed after planned date (all types: BC, BX, FC, FX, PVER, PVAR) |
-| **PRPL 16** | Workitem is not closed after planned date |
-| **PRPL 18** | I-FD not committed 5 or more working days after attached I-SW was committed |
+```powershell
+.\validate.ps1 --target_users YOUR_NTID
+```
 
 ---
 
 ## Configuration
 
-**File**: `.env`
+Settings are read from the `.env` file in the tool directory. CLI arguments override `.env` values.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `RQ1_USER` | Yes | Your RQ1 login NTID |
+| `RQ1_PROJECT_IDS` | Yes | Comma-separated RQ1 project IDs (e.g. `RQONE00001940`) |
+| `RQ1_MEMBERS` | No | Comma-separated NTIDs to validate. Defaults to `RQ1_USER`. |
+| `RQ1_RULES` | No | Comma-separated rule IDs to run. Defaults to all 12 rules. |
+
+`RQ1_PASSWORD` is never stored in `.env`. The tool prompts on first run and caches the password for the terminal session only.
+
+### Example .env
 
 ```ini
-# Your RQ1 username
-RQ1_USER=your_username
-
-# Project IDs to validate (comma-separated)
+RQ1_USER=DAB5HC
 RQ1_PROJECT_IDS=RQONE00001940,RQONE00002345
-```
 
-**Find Project IDs**: Open User in IPE ? Projects ? Copy RQ1 number
+# Optional: validate a team without specifying on the command line
+RQ1_MEMBERS=DAB5HC,TRE5HC,ABC1HC
+
+# Optional: run only a subset of rules
+# RQ1_RULES=PRPL 01,PRPL 11,PRPL 14
+```
 
 ---
 
 ## Usage
 
-### Method 1: Wrapper Script (Recommended)
-```powershell
-.\validate.ps1 <NTID>
-```
-Password cached automatically after first entry
+### PowerShell Wrapper (Recommended)
 
-### Method 2: Direct Execution
-```powershell
-.\validate_user_items.exe <NTID>
-```
-Prompts for password every time
+`validate.ps1` handles password prompting and session caching. The password is stored in memory only and cleared when the terminal is closed.
 
-### With GitHub Copilot
-Open Copilot Chat in VS Code:
+```powershell
+# Validate a single user
+.\validate.ps1 --target_users DAB5HC
+
+# Validate multiple users
+.\validate.ps1 --target_users DAB5HC,TRE5HC,ABC1HC
+
+# Run specific rules only
+.\validate.ps1 --target_users DAB5HC --rules "PRPL 01,PRPL 11"
+
+# Override project ID at runtime
+.\validate.ps1 --target_users DAB5HC --project_id RQONE00001940
+
+# Legacy usage (single positional argument, still supported)
+.\validate.ps1 DAB5HC
 ```
-validate my RQ1 items
-check my deviation
-show PRPL violations for ABC1HC
+
+### Direct Executable
+
+```powershell
+# Interactive (prompts for password)
+.\validate_user_items.exe --target_users DAB5HC
+
+# Non-interactive (for automation/scripting)
+.\validate_user_items.exe --user ABC1HC --password MyPass --target_users ABC1HC,DEF2HC
+
+# Show help
+.\validate_user_items.exe --help
 ```
-See `COPILOT_INSTRUCTIONS.md` for details.
+
+---
+
+## CLI Reference
+
+All arguments are optional if the corresponding `.env` variable is set.
+
+| Argument | Fallback (.env) | Description |
+|----------|-----------------|-------------|
+| `--user NTID` | `RQ1_USER` | Login username (NTID) |
+| `--password PASSWORD` | `RQ1_PASSWORD` | Authentication password |
+| `--target_users NTID[,...]` | `RQ1_MEMBERS` | Comma-separated NTIDs to validate |
+| `--project_id RQONE[,...]` | `RQ1_PROJECT_IDS` | Comma-separated project IDs |
+| `--rules "PRPL XX[,...]"` | `RQ1_RULES` | Comma-separated rule IDs to apply |
+
+Priority order: CLI argument > `.env` variable > default behavior
+
+---
+
+## Rules
+
+| Rule | Severity | Description |
+|------|----------|-------------|
+| PRPL 01 | WARNING | BC-R not in Requested state 8 weeks before PVER planned delivery date |
+| PRPL 02 | WARNING | Workitem in Started state without a planned date in the planning tab |
+| PRPL 03 | INFO | Item is in Conflicted state |
+| PRPL 06 | WARNING | IFD defect detection/injection attributes are incomplete |
+| PRPL 07 | WARNING | BC planned date is later than the requested delivery date of a mapped PVER/PVAR |
+| PRPL 11 | WARNING | IFD 5-day evaluation SLA exceeded |
+| PRPL 12 | WARNING | IFD not closed after all mapped BC-Rs are closed or cancelled |
+| PRPL 13 | WARNING | IFD not implemented or closed after BC-R planned date |
+| PRPL 14 | WARNING | IFD not committed while parent ISW is committed |
+| PRPL 15 | WARNING | Release not closed after planned date (all types: BC, BX, FC, FX, PVER, PVAR) |
+| PRPL 16 | WARNING | Workitem not closed after planned date |
+| PRPL 18 | WARNING | IFD not committed 5 or more working days after parent ISW was committed |
+
+Severity meanings:
+- **WARNING** — violation that affects pass rate; action required
+- **INFO** — informational finding; does not affect pass rate
 
 ---
 
 ## Output
 
-### Severity Levels
-- **WARNING**: Must fix (impacts pass rate)
-- **INFO**: Review only (doesn't impact pass rate)
+### Summary Block
 
-### Pass Rate
 ```
-Pass Rate = (Total - WARNING violations) / Total  100%
+Total items assigned: 31
+  - Issues: 7 (IFD=6, ISW=1)
+  - Releases: 9 (BC=8, FC=1)
+  - Workitems: 15
+Total checks performed: 104
+Rules applied: 01, 02, 03, 06, 07, 11, 12, 13, 14, 15, 16, 18
+Violations found: 18 (WARNING: 8, INFO: 10)
+Pass rate: 92.3% (based on WARNING violations)
 ```
 
-### Example Output
+### Pass Rate Formula
+
 ```
-Total items: 17
-Violations: 4 (WARNING: 0, INFO: 4)
-Pass rate: 100.0%
+Pass rate = (Total checks - WARNING violations) / Total checks * 100%
 ```
+
+---
+
+## Error Codes
+
+The tool returns a specific exit code for each error category, usable in scripts via `$LASTEXITCODE`.
+
+| Exit Code | Code | Cause | Action |
+|-----------|------|-------|--------|
+| 0 | — | Success | — |
+| 2 | AUTH | Wrong username or password | Re-run; password cache is cleared automatically |
+| 3 | CONNECTION | Cannot reach RQ1 server | Check VPN connection |
+| 4 | SERVER_ERROR | RQ1 server error (5xx) | Server may be under maintenance; try again later |
+| 5 | TIMEOUT | Connection timed out | Check network connection and retry |
+| 6 | SSL | SSL/TLS certificate error | Check certificate validity |
+| 7 | FORBIDDEN | Access denied (403) | Verify account permissions |
+| 8 | NOT_FOUND | Resource not found (404) | Check item IDs |
+| 9 | RATE_LIMIT | Too many requests (429) | Wait and retry |
+| 1 | UNKNOWN | Unexpected error | See full terminal output |
 
 ---
 
 ## Troubleshooting
 
-| Issue | Solution |
-|-------|----------|
-| Authentication failed | Re-run and enter correct password |
-| No items found | Check `RQ1_PROJECT_IDS` in `.env` |
-| Connection timeout | Check VPN connection |
-| Wrong cached password | Close terminal and reopen |
+| Symptom | Cause | Solution |
+|---------|-------|---------|
+| `[ERROR:AUTH]` | Wrong password | Re-run; the password cache is cleared automatically |
+| `[ERROR:CONNECTION]` | VPN disconnected | Connect to VPN and retry |
+| `[ERROR:SERVER_ERROR]` | Server under maintenance | Wait and retry |
+| `[ERROR:TIMEOUT]` | Slow or unstable network | Check connection and retry |
+| No items found | Wrong project ID | Verify `RQ1_PROJECT_IDS` in `.env` |
+| Wrong cached password | Stale cached value | Run `Remove-Item Env:\RQ1_PASSWORD` and retry |
 
----
+### Clear Cached Password
 
-## Report an Issue
-
-If you encounter a bug or unexpected result, please open a GitHub issue:
-
-https://github.com/sybinh/Quality_Check/issues/new
-
-Include in your report:
-- Your NTID (e.g. DAB5HC)
-- The rule that triggered incorrectly (e.g. PRPL 15)
-- The item ID (e.g. RQONE04659895)
-- Copy-paste the full output from the terminal
-
----
-
-## Password Caching
-
-**How it works:**
-1. First run: Enter password ? cached in memory
-2. Later runs: Uses cached password
-3. Close terminal: Password cleared
-
-**Manual cache clear:**
 ```powershell
 Remove-Item Env:\RQ1_PASSWORD
 ```
 
 ---
 
+## Report an Issue
+
+https://github.com/sybinh/Quality_Check/issues/new
+
+Include in the report:
+- Your NTID
+- Rule that triggered incorrectly (e.g. PRPL 15)
+- Item ID (e.g. RQONE04659895)
+- Full terminal output
+
+---
+
 ## Changelog
+
+### Version 1.4
+- New: CLI interface (`--user`, `--password`, `--target_users`, `--project_id`, `--rules`)
+- New: `RQ1_MEMBERS` in `.env` for team validation without CLI arguments
+- New: `RQ1_RULES` in `.env` to run a subset of rules; disabled rules are fully skipped including their API calls
+- New: Typed exit codes (2-9) for each error category
+- New: Structured error messages with actionable hints per error type
 
 ### Version 1.3 (Apr 6, 2026)
 - Fix: PRPL 01 now runs correctly (was silently skipped in all previous versions)
 - Fix: PRPL 15 now covers all release types (BC, BX, FC, FX, PVER, PVAR), not just BC and FC
-- Fix: PRPL 15 was reading a wrong field and never triggering — now resolved
+- Fix: PRPL 15 was reading a wrong field and never triggering
 - Fix: Code reliability improvements (NameError guard, redundant condition removed)
 
 ### Version 1.2 (Jan 8, 2026)
-- Auto password caching with wrapper script
-- Password masking (****) during input
+- Auto password caching via PowerShell wrapper script
+- Password masking during input
 - Clear authentication error messages
-- Hardcoded PRODUCTIVE environment
-- Simplified documentation
 
 ### Version 1.1
 - 12 PRPL rules implementation
-- Executable package
-- GitHub Copilot integration
+- Standalone executable package
 
 ---
 
 ## Files Included
 
-- `validate.ps1` - Wrapper with auto password caching
-- `validate_user_items.exe` - Main validation tool (21.6 MB)
-- `README.md` - This file
-- `COPILOT_INSTRUCTIONS.md` - GitHub Copilot guide
-- `.env.example` - Configuration template
+| File | Description |
+|------|-------------|
+| `validate.ps1` | PowerShell wrapper with password caching |
+| `validate_user_items.exe` | Main validation executable |
+| `README.md` | This file |
+| `.env.example` | Configuration template |
