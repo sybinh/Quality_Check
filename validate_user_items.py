@@ -885,20 +885,81 @@ def validate_user_items(target_username: str, login_username: str = None):
 
 if __name__ == "__main__":
     import sys
+    import argparse
 
-    # Determine target usernames: CLI arg > RQ1_MEMBERS in .env > owner (RQ1_USER)
-    if len(sys.argv) >= 2:
-        targets = [sys.argv[1]]
+    parser = argparse.ArgumentParser(
+        prog='validate_user_items',
+        description='Quality Check Tool - Validate RQ1 items against PRPL rules',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            'Examples:\n'
+            '  validate_user_items.exe --target_users DAB5HC,TRE5HC\n'
+            '  validate_user_items.exe --user DAB5HC --target_users DAB5HC,TRE5HC --project_id RQONE00001940\n'
+            '  validate_user_items.exe --user ABC1HC --password MyPass --target_users ABC1HC,DEF2HC\n'
+            '  validate_user_items.exe --rules "PRPL 01,PRPL 11"\n\n'
+            'All arguments fall back to .env values if not provided:\n'
+            '  --user         <- RQ1_USER\n'
+            '  --password     <- RQ1_PASSWORD  (prompts if missing)\n'
+            '  --target_users <- RQ1_MEMBERS   (defaults to --user / RQ1_USER)\n'
+            '  --project_id   <- RQ1_PROJECT_IDS\n'
+            '  --rules        <- RQ1_RULES     (all rules if not set)'
+        )
+    )
+    parser.add_argument(
+        '--user', metavar='NTID',
+        help='Login username (NTID). Overrides RQ1_USER in .env.'
+    )
+    parser.add_argument(
+        '--password', metavar='PASSWORD',
+        help='Authentication password. Overrides RQ1_PASSWORD in .env.'
+    )
+    parser.add_argument(
+        '--target_users', metavar='NTID[,NTID,...]',
+        help='Comma-separated NTIDs to validate. Overrides RQ1_MEMBERS in .env.'
+    )
+    parser.add_argument(
+        '--project_id', metavar='RQONE_xxx[,...]',
+        help='Comma-separated RQ1 project IDs. Overrides RQ1_PROJECT_IDS in .env.'
+    )
+    parser.add_argument(
+        '--rules', metavar='"PRPL XX[,...]"',
+        help='Rules to apply (e.g. "PRPL 01,PRPL 11"). Overrides RQ1_RULES in .env.'
+    )
+    # Legacy positional arg for backward compatibility
+    parser.add_argument(
+        'username', nargs='?', metavar='USERNAME',
+        help='(Legacy) Single target username. Prefer --target_users.'
+    )
+
+    args = parser.parse_args()
+
+    # Apply CLI overrides to env (read by validate_user_items at runtime)
+    if args.user:
+        os.environ['RQ1_USER'] = args.user
+    if args.password:
+        os.environ['RQ1_PASSWORD'] = args.password
+
+    # Override module-level config globals if provided via CLI
+    if args.project_id:
+        RQ1_PROJECT_IDS[:] = [p.strip() for p in args.project_id.split(',') if p.strip()]
+    if args.rules:
+        globals()['RQ1_ENABLED_RULES'] = set(r.strip() for r in args.rules.split(',') if r.strip()) or None
+
+    # Determine targets: --target_users > legacy positional > RQ1_MEMBERS > login user
+    if args.target_users:
+        targets = [t.strip() for t in args.target_users.split(',') if t.strip()]
+    elif args.username:
+        targets = [args.username]
     elif RQ1_MEMBERS:
         targets = RQ1_MEMBERS
     else:
-        owner = os.getenv('RQ1_USER', '')
-        if not owner:
-            print("No username provided.")
-            print("Usage: python validate_user_items.py <username>")
-            print("Or set RQ1_MEMBERS=NTID1,NTID2 in .env to validate your team")
-            sys.exit(1)
-        targets = [owner]
+        login_user = os.getenv('RQ1_USER', '')
+        if not login_user:
+            parser.error(
+                'No target user specified.\n'
+                '  Use --target_users, or set RQ1_USER / RQ1_MEMBERS in .env'
+            )
+        targets = [login_user]
 
     for target in targets:
         validate_user_items(target_username=target)

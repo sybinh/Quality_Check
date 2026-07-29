@@ -1,32 +1,30 @@
 # Quality Check Tool - PowerShell Wrapper with Auto Password Caching
-# Prompts for password once per terminal session, caches for subsequent validations
+# Handles password prompting once per session; all other args are forwarded to the exe.
+#
+# Usage examples:
+#   .\validate.ps1 --target_users DAB5HC,TRE5HC
+#   .\validate.ps1 --user DAB5HC --target_users DAB5HC,TRE5HC --project_id RQONE00001940
+#   .\validate.ps1 --rules "PRPL 01,PRPL 11" --target_users DAB5HC
+#   .\validate.ps1 DAB5HC   (legacy: single positional username)
 
-param(
-    [Parameter(Mandatory=$true, Position=0)]
-    [string]$Username
-)
-
-# Check if password is already cached in session
+# Prompt for password if not cached in current session
 if (-not $env:RQ1_PASSWORD) {
-    Write-Host "?? Enter password once for this terminal session" -ForegroundColor Yellow
+    Write-Host "Enter password once for this terminal session" -ForegroundColor Yellow
     
-    # Prompt for password securely (masked input)
     $securePassword = Read-Host "Enter RQ1 password" -AsSecureString
-    
-    # Convert SecureString to plain text for environment variable
     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePassword)
     $env:RQ1_PASSWORD = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
     [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($BSTR)
     
-    Write-Host "? Password cached for this terminal session" -ForegroundColor Green
+    Write-Host "Password cached for this terminal session" -ForegroundColor Green
     Write-Host ""
 } else {
-    Write-Host "? Using cached password from session" -ForegroundColor Green
+    Write-Host "Using cached password from session" -ForegroundColor Green
 }
 
-# Run the executable
+# Run the executable, forwarding all arguments
 $exePath = Join-Path $PSScriptRoot "validate_user_items.exe"
-& $exePath $Username
+& $exePath @args
 
 # Check exit code and show targeted message
 $exitCode = $LASTEXITCODE
