@@ -23,3 +23,13 @@ RQ1_ENVIRONMENT = "PRODUCTIVE"  # Options: "PRODUCTIVE", "ACCEPTANCE"
 # Examples: "RQONE12345678" or "RQONE12345678,RQONE87654321"
 _project_ids_raw = os.getenv('RQ1_PROJECT_IDS', '')
 RQ1_PROJECT_IDS = [pid.strip() for pid in _project_ids_raw.split(',') if pid.strip()]  # Parse comma-separated list
+
+# Optional: comma-separated rule IDs to enable (e.g. PRPL 01,PRPL 03,PRPL 11)
+# If not set, all 12 rules are applied
+_rules_raw = os.getenv('RQ1_RULES', '')
+RQ1_ENABLED_RULES = set(r.strip() for r in _rules_raw.split(',') if r.strip()) or None
+
+# Optional: comma-separated NTIDs of team members to validate
+# If not set, only validates the owner (RQ1_USER) unless a CLI argument is given
+_members_raw = os.getenv('RQ1_MEMBERS', '')
+RQ1_MEMBERS = [m.strip() for m in _members_raw.split(',') if m.strip()]

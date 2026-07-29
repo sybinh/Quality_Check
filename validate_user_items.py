@@ -40,7 +40,7 @@ from rq1.models import (
 
 # Import config and rules
 sys.path.append('src')
-from config import RQ1_TOOLNAME, RQ1_TOOLVERSION, RQ1_PROJECT_IDS
+from config import RQ1_TOOLNAME, RQ1_TOOLVERSION, RQ1_PROJECT_IDS, RQ1_ENABLED_RULES, RQ1_MEMBERS
 from rules.rule_prpl_01_bc_requested_state import Rule_BC_RequestedState, PverMapping
 from rules.rule_prpl_02_workitem_planned import Rule_Workitem_PlannedDate
 from rules.rule_prpl_03_conflicted_state import Rule_Conflicted_State
@@ -159,6 +159,7 @@ def validate_user_items(target_username: str, login_username: str = None):
     issue_counts = {'IFD': 0, 'ISW': 0, 'Other': 0}
     release_counts = {'BC': 0, 'BX': 0, 'FC': 0, 'PVER': 0, 'PVAR': 0, 'Other': 0}
     parent_release_cache = {}
+    _enabled = lambda r: RQ1_ENABLED_RULES is None or r in RQ1_ENABLED_RULES
     
     # Query Issues and validate IFD rules
     print("[1] Querying Issues (all types: IFD, ISW)...")
@@ -213,7 +214,7 @@ def validate_user_items(target_username: str, login_username: str = None):
             }
             
             # PRPL 06: Fetch defect attributes only for IFD with Category=Defect (separate query)
-            if is_ifd and issue_category == 'Defect':
+            if is_ifd and issue_category == 'Defect' and _enabled('PRPL 06'):
                 defect_query = client.query(
                     Issue,
                     where=(IssueProperty.id == getattr(issue, 'id', '')),
@@ -242,20 +243,21 @@ def validate_user_items(target_username: str, login_username: str = None):
                     })
             
             # PRPL 03: Check for Conflicted state
-            rule03 = Rule_Conflicted_State(issue_data, "Issue")
-            result03 = rule03.execute()
-            total_checks += 1
-            if not result03.passed:
-                violations.append({
-                    'item_id': issue.id,
-                    'item_title': issue.dcterms__title,
-                    'rule': 'PRPL 03',
-                    'severity': result03.severity,
-                    'description': result03.description
-                })
+            if _enabled('PRPL 03'):
+                rule03 = Rule_Conflicted_State(issue_data, "Issue")
+                result03 = rule03.execute()
+                total_checks += 1
+                if not result03.passed:
+                    violations.append({
+                        'item_id': issue.id,
+                        'item_title': issue.dcterms__title,
+                        'rule': 'PRPL 03',
+                        'severity': result03.severity,
+                        'description': result03.description
+                    })
             
             # PRPL 06: Check defect attributes (only for IFD with Category=Defect)
-            if is_ifd:
+            if is_ifd and _enabled('PRPL 06'):
                 rule06 = Rule_Ifd_DefectAttributes(issue_data)
                 result06 = rule06.execute()
                 total_checks += 1
@@ -269,7 +271,7 @@ def validate_user_items(target_username: str, login_username: str = None):
                     })
             
             # PRPL 11: Check IFD 5-day SLA (only for IFD)
-            if is_ifd:
+            if is_ifd and _enabled('PRPL 11'):
                 rule11 = Rule_Issue_Sla(issue_data, client=client, project_ids=RQ1_PROJECT_IDS)
                 result11 = rule11.execute()
                 total_checks += 1
@@ -281,14 +283,12 @@ def validate_user_items(target_username: str, login_username: str = None):
                         'item_title': issue.dcterms__title,
                         'description': result11.description
                     })
-                
-                # PRPL 14 & 18: IFD-ISW Commitment checks
+            
+            # PRPL 14 & 18: IFD-ISW Commitment checks (only for IFD)
+            if is_ifd and (_enabled('PRPL 14') or _enabled('PRPL 18')):
                 parent_isw_data = None
                 hasparent = getattr(issue, 'hasparent', None)
-                
                 if hasparent:
-                    # hasparent is a fully populated Issue object (via nested select)
-                    # No separate HTTP call needed
                     parent_isw_data = {
                         'id': getattr(hasparent, 'id', 'UNKNOWN'),
                         'lifecyclestate': getattr(hasparent, 'lifecyclestate', ''),
@@ -296,33 +296,39 @@ def validate_user_items(target_username: str, login_username: str = None):
                     }
                 
                 # PRPL 14: IFD not committed when ISW committed
-                rule14 = Rule_IFD_ISW_Commitment(issue_data, parent_isw_data)
-                result14 = rule14.execute()
-                total_checks += 1
-                if not result14.passed:
-                    violations.append({
-                        'rule': 'PRPL 14',
-                        'severity': result14.severity,
-                        'item_id': issue.id,
-                        'item_title': issue.dcterms__title,
-                        'description': result14.description
-                    })
+                if _enabled('PRPL 14'):
+                    rule14 = Rule_IFD_ISW_Commitment(issue_data, parent_isw_data)
+                    result14 = rule14.execute()
+                    total_checks += 1
+                    if not result14.passed:
+                        violations.append({
+                            'rule': 'PRPL 14',
+                            'severity': result14.severity,
+                            'item_id': issue.id,
+                            'item_title': issue.dcterms__title,
+                            'description': result14.description
+                        })
                 
                 # PRPL 18: IFD not committed 5+ working days after ISW committed
-                rule18 = Rule_IFD_ISW_Commitment_Delay(issue_data, parent_isw_data, client=client)
-                result18 = rule18.execute()
-                total_checks += 1
-                if not result18.passed:
-                    violations.append({
-                        'rule': 'PRPL 18',
-                        'severity': result18.severity,
-                        'item_id': issue.id,
-                        'item_title': issue.dcterms__title,
-                        'description': result18.description
-                    })
+                if _enabled('PRPL 18'):
+                    rule18 = Rule_IFD_ISW_Commitment_Delay(issue_data, parent_isw_data, client=client)
+                    result18 = rule18.execute()
+                    total_checks += 1
+                    if not result18.passed:
+                        violations.append({
+                            'rule': 'PRPL 18',
+                            'severity': result18.severity,
+                            'item_id': issue.id,
+                            'item_title': issue.dcterms__title,
+                            'description': result18.description
+                        })
             
             # Only validate IFD type for PRPL 12/13
             if not is_ifd:
+                continue
+            
+            # Skip IRM query if neither PRPL 12 nor PRPL 13 is enabled
+            if not _enabled('PRPL 12') and not _enabled('PRPL 13'):
                 continue
             
             # Get mapped BC-Releases for this IFD
@@ -391,7 +397,7 @@ def validate_user_items(target_username: str, login_username: str = None):
                         continue
                 
                 # PRPL 12: Check if IFD should be closed
-                if mapped_bcs:
+                if mapped_bcs and _enabled('PRPL 12'):
                     rule12 = Rule_IFD_BcClosure(issue_data, mapped_bcs)
                     result12 = rule12.execute()
                     total_checks += 1
@@ -405,7 +411,7 @@ def validate_user_items(target_username: str, login_username: str = None):
                         })
                 
                 # PRPL 13: Check if IFD should be implemented after BC planned dates
-                if bc_mappings:
+                if bc_mappings and _enabled('PRPL 13'):
                     rule13 = Rule_IFD_BcPlannedDate(issue_data, bc_mappings)
                     result13 = rule13.execute()
                     total_checks += 1
@@ -496,33 +502,39 @@ def validate_user_items(target_username: str, login_username: str = None):
             }
             
             # PRPL 03: Check for Conflicted state
-            rule03 = Rule_Conflicted_State(release_data, "Release")
-            result03 = rule03.execute()
-            total_checks += 1
-            if not result03.passed:
-                violations.append({
-                    'item_id': release.id,
-                    'item_title': release.dcterms__title,
-                    'rule': 'PRPL 03',
-                    'severity': result03.severity,
-                    'description': result03.description
-                })
+            if _enabled('PRPL 03'):
+                rule03 = Rule_Conflicted_State(release_data, "Release")
+                result03 = rule03.execute()
+                total_checks += 1
+                if not result03.passed:
+                    violations.append({
+                        'item_id': release.id,
+                        'item_title': release.dcterms__title,
+                        'rule': 'PRPL 03',
+                        'severity': result03.severity,
+                        'description': result03.description
+                    })
             
             # PRPL 15: Release closure check (all types: BC, BX, FC, FX, etc.)
-            rule15 = Rule_Release_Closure(release_data)
-            result15 = rule15.execute()
-            total_checks += 1
-            if not result15.passed:
-                violations.append({
-                    'rule': 'PRPL 15',
-                    'severity': result15.severity,
-                    'item_id': release.id,
-                    'item_title': release.dcterms__title,
-                    'description': result15.description
-                })
+            if _enabled('PRPL 15'):
+                rule15 = Rule_Release_Closure(release_data)
+                result15 = rule15.execute()
+                total_checks += 1
+                if not result15.passed:
+                    violations.append({
+                        'rule': 'PRPL 15',
+                        'severity': result15.severity,
+                        'item_id': release.id,
+                        'item_title': release.dcterms__title,
+                        'description': result15.description
+                    })
             
             # Only validate BC/BX types (BC and BX are treated the same)
             if not is_bc_or_bx:
+                continue
+            
+            # Skip RRM query if neither PRPL 01 nor PRPL 07 is enabled
+            if not _enabled('PRPL 01') and not _enabled('PRPL 07'):
                 continue
             
             # Get mapped PVER/PVAR for this BC/BX via Releasereleasemap
@@ -625,7 +637,7 @@ def validate_user_items(target_username: str, login_username: str = None):
                     ))
                 
                 # PRPL 01: Check if BC is in Requested state
-                if pver_mappings:
+                if pver_mappings and _enabled('PRPL 01'):
                     rule01 = Rule_BC_RequestedState(release_data, pver_mappings)
                     result01 = rule01.execute()
                     total_checks += 1
@@ -639,7 +651,7 @@ def validate_user_items(target_username: str, login_username: str = None):
                         })
                 
                 # PRPL 07: Check BC planned date vs PVER/PVAR delivery dates
-                if pst_mappings:
+                if pst_mappings and _enabled('PRPL 07'):
                     rule07 = Rule_Bc_CheckPstDates(release_data, pst_mappings)
                     results07 = rule07.execute()  # Returns List[ValidationResult]
                     
@@ -705,43 +717,46 @@ def validate_user_items(target_username: str, login_username: str = None):
             }
             
             # PRPL 03: Check for Conflicted state
-            rule03 = Rule_Conflicted_State(workitem_data, "Workitem")
-            result03 = rule03.execute()
-            total_checks += 1
-            if not result03.passed:
-                violations.append({
-                    'item_id': workitem.id,
-                    'item_title': workitem.dcterms__title,
-                    'rule': 'PRPL 03',
-                    'severity': result03.severity,
-                    'description': result03.description
-                })
+            if _enabled('PRPL 03'):
+                rule03 = Rule_Conflicted_State(workitem_data, "Workitem")
+                result03 = rule03.execute()
+                total_checks += 1
+                if not result03.passed:
+                    violations.append({
+                        'item_id': workitem.id,
+                        'item_title': workitem.dcterms__title,
+                        'rule': 'PRPL 03',
+                        'severity': result03.severity,
+                        'description': result03.description
+                    })
             
             # PRPL 02: Check planned date
-            rule02 = Rule_Workitem_PlannedDate(workitem_data)
-            result02 = rule02.execute()
-            total_checks += 1
-            if not result02.passed:
-                violations.append({
-                    'item_id': workitem.id,
-                    'item_title': workitem.dcterms__title,
-                    'rule': 'PRPL 02',
-                    'severity': result02.severity,
-                    'description': result02.description
-                })
+            if _enabled('PRPL 02'):
+                rule02 = Rule_Workitem_PlannedDate(workitem_data)
+                result02 = rule02.execute()
+                total_checks += 1
+                if not result02.passed:
+                    violations.append({
+                        'item_id': workitem.id,
+                        'item_title': workitem.dcterms__title,
+                        'rule': 'PRPL 02',
+                        'severity': result02.severity,
+                        'description': result02.description
+                    })
             
             # PRPL 16: Check closure after planned date
-            rule16 = Rule_Workitem_Close(workitem_data)
-            result16 = rule16.execute()
-            total_checks += 1
-            if not result16.passed:
-                violations.append({
-                    'item_id': workitem.id,
-                    'item_title': workitem.dcterms__title,
-                    'rule': 'PRPL 16',
-                    'severity': result16.severity,
-                    'description': result16.description
-                })
+            if _enabled('PRPL 16'):
+                rule16 = Rule_Workitem_Close(workitem_data)
+                result16 = rule16.execute()
+                total_checks += 1
+                if not result16.passed:
+                    violations.append({
+                        'item_id': workitem.id,
+                        'item_title': workitem.dcterms__title,
+                        'rule': 'PRPL 16',
+                        'severity': result16.severity,
+                        'description': result16.description
+                    })
         
         print(f"[OK] Validated {len(workitem_query.members)} Workitems")
         
@@ -766,8 +781,11 @@ def validate_user_items(target_username: str, login_username: str = None):
     print(f"  - Releases: {total_releases} ({', '.join([f'{k}={v}' for k, v in release_counts.items() if v > 0])})")
     print(f"  - Workitems: {len(workitem_query.members)}")
     print(f"Total checks performed: {total_checks}")
-    print(f"Rules applied: PRPL 01, 02, 03, 06, 07, 11, 12, 13, 14, 15, 16, 18")
-    
+    _all_rules = ['PRPL 01', 'PRPL 02', 'PRPL 03', 'PRPL 06', 'PRPL 07',
+                  'PRPL 11', 'PRPL 12', 'PRPL 13', 'PRPL 14', 'PRPL 15', 'PRPL 16', 'PRPL 18']
+    _active_rules = [r for r in _all_rules if RQ1_ENABLED_RULES is None or r in RQ1_ENABLED_RULES]
+    print(f"Rules applied: {', '.join(r.replace('PRPL ', '') for r in _active_rules)}")
+
     # Count WARNING violations only (exclude INFO for pass rate calculation)
     warning_violations = [v for v in violations if v.get('severity') == 'WARNING']
     info_violations = [v for v in violations if v.get('severity') == 'INFO']
@@ -830,14 +848,20 @@ def validate_user_items(target_username: str, login_username: str = None):
 
 if __name__ == "__main__":
     import sys
-    
-    # Get target username from command line argument (required)
-    if len(sys.argv) < 2:
-        print("Usage: python validate_user_items.py <username>")
-        print("Example: python validate_user_items.py TRE5HC")
-        sys.exit(1)
-    
-    target_user = sys.argv[1]
-    
-    # Authenticate using credentials from environment
-    validate_user_items(target_username=target_user)
+
+    # Determine target usernames: CLI arg > RQ1_MEMBERS in .env > owner (RQ1_USER)
+    if len(sys.argv) >= 2:
+        targets = [sys.argv[1]]
+    elif RQ1_MEMBERS:
+        targets = RQ1_MEMBERS
+    else:
+        owner = os.getenv('RQ1_USER', '')
+        if not owner:
+            print("No username provided.")
+            print("Usage: python validate_user_items.py <username>")
+            print("Or set RQ1_MEMBERS=NTID1,NTID2 in .env to validate your team")
+            sys.exit(1)
+        targets = [owner]
+
+    for target in targets:
+        validate_user_items(target_username=target)
