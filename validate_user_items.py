@@ -55,6 +55,29 @@ from rules.rule_prpl_16_workitem_close import Rule_Workitem_Close
 from rules.rule_prpl_18_ifd_isw_commitment_delay import Rule_IFD_ISW_Commitment_Delay
 
 
+def _classify_error(e: Exception) -> tuple:
+    """Classify an exception into (error_code, user_hint) for clear diagnostics."""
+    msg = str(e).lower()
+    raw = str(e)
+    if any(k in msg for k in ('401', 'unauthorized', 'token_not_authorized', 'authentication failed')):
+        return 'AUTH', 'Wrong username or password.'
+    if any(k in msg for k in ('403', 'forbidden')):
+        return 'FORBIDDEN', 'Access denied - your account may not have permission for this resource.'
+    if any(k in msg for k in ('404', 'not found')):
+        return 'NOT_FOUND', 'Resource not found on the server.'
+    if any(k in msg for k in ('500', '502', '503', '504', 'internal server error', 'bad gateway', 'service unavailable', 'gateway timeout')):
+        return 'SERVER_ERROR', 'RQ1 server returned an error - the server may be under maintenance. Try again later.'
+    if any(k in msg for k in ('connection refused', 'failed to establish a new connection', 'network unreachable', 'no route to host', 'name or service not known', 'temporary failure in name resolution', 'getaddrinfo failed')):
+        return 'CONNECTION', 'Cannot reach RQ1 server - check your network connection and VPN.'
+    if any(k in msg for k in ('timeout', 'timed out', 'read timeout', 'connect timeout')):
+        return 'TIMEOUT', 'Connection timed out - the server may be slow. Try again.'
+    if any(k in msg for k in ('ssl', 'certificate verify failed', 'certificate_verify_failed')):
+        return 'SSL', 'SSL/TLS error - your certificate may be outdated or network is being intercepted.'
+    if any(k in msg for k in ('429', 'too many requests', 'rate limit')):
+        return 'RATE_LIMIT', 'Too many requests - wait a moment and try again.'
+    return 'UNKNOWN', raw
+
+
 def validate_user_items(target_username: str, login_username: str = None):
     """Validate all items assigned to target user against PRPL rules."""
     
@@ -109,17 +132,13 @@ def validate_user_items(target_username: str, login_username: str = None):
             toolversion=RQ1_TOOLVERSION
         )
     except Exception as e:
-        error_msg = str(e).lower()
-        if "401" in error_msg or "unauthorized" in error_msg or "token_not_authorized" in error_msg:
-            print("[ERROR] Authentication failed!")
-            print(f"  Username: {login_username}")
-            print("  Password: INCORRECT")
-            print("\nPlease check:")
-            print("  1. Is your username correct?")
-            print("  2. Is your password correct?")
-            print("  3. Is your account active in RQ1?")
-        else:
-            print(f"[ERROR] Failed to initialize RQ1 client: {e}")
+        err_type, hint = _classify_error(e)
+        print(f"\n[ERROR:{err_type}] Cannot connect to RQ1.")
+        print(f"  Reason : {hint}")
+        if err_type == 'AUTH':
+            print(f"  Login  : {login_username}")
+            print(  "  Action : Re-run and enter the correct password.")
+            os.environ.pop("RQ1_PASSWORD", None)
         sys.exit(1)
     
     # Get user's URI
@@ -141,14 +160,11 @@ def validate_user_items(target_username: str, login_username: str = None):
         print(f"[OK] Found: {user.fullname}\n")
         
     except Exception as e:
-        error_msg = str(e).lower()
-        if "401" in error_msg or "unauthorized" in error_msg or "token_not_authorized" in error_msg:
-            print("[ERROR] Authentication failed during query!")
-            print(f"  Username: {login_username}")
-            print("  Password: INCORRECT")
-            print("\nPlease re-run and enter the correct password.")
-        else:
-            print(f"[ERROR] Failed to query user: {e}")
+        err_type, hint = _classify_error(e)
+        print(f"[ERROR:{err_type}] Failed to look up user '{target_username}'.")
+        print(f"  Reason : {hint}")
+        if err_type == 'AUTH':
+            os.environ.pop("RQ1_PASSWORD", None)
         sys.exit(1)
     
     violations = []
@@ -445,7 +461,10 @@ def validate_user_items(target_username: str, login_username: str = None):
         else:
             print()
     except Exception as e:
-        print(f"[ERROR] Failed to validate Issues: {e}\n")
+        err_type, hint = _classify_error(e)
+        print(f"[ERROR:{err_type}] Failed to validate Issues: {hint}\n")
+        if err_type in ('AUTH', 'CONNECTION', 'TIMEOUT', 'SERVER_ERROR'):
+            sys.exit(1)
     
     # Query Releases and validate BC/BX rules
     print("[2] Querying Releases (all types: BC, BX, FC, PVER, etc.)...")
@@ -685,7 +704,10 @@ def validate_user_items(target_username: str, login_username: str = None):
         
         print(f"     BC/BX releases: {bc_bx_total} (validated with PRPL 01, 03, 07)\n")
     except Exception as e:
-        print(f"[ERROR] Failed to validate Releases: {e}\n")
+        err_type, hint = _classify_error(e)
+        print(f"[ERROR:{err_type}] Failed to validate Releases: {hint}\n")
+        if err_type in ('AUTH', 'CONNECTION', 'TIMEOUT', 'SERVER_ERROR'):
+            sys.exit(1)
     
     # Query Workitems
     print("[3] Validating Workitems...")
@@ -768,7 +790,10 @@ def validate_user_items(target_username: str, login_username: str = None):
         print()
     
     except Exception as e:
-        print(f"[ERROR] Failed to validate Workitems: {e}")
+        err_type, hint = _classify_error(e)
+        print(f"[ERROR:{err_type}] Failed to validate Workitems: {hint}")
+        if err_type in ('AUTH', 'CONNECTION', 'TIMEOUT', 'SERVER_ERROR'):
+            sys.exit(1)
     
     # Print validation summary
     print(f"{'='*80}")
