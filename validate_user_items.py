@@ -78,6 +78,18 @@ def _classify_error(e: Exception) -> tuple:
     return 'UNKNOWN', raw
 
 
+_EXIT_CODES = {
+    'AUTH':         2,
+    'CONNECTION':   3,
+    'SERVER_ERROR': 4,
+    'TIMEOUT':      5,
+    'SSL':          6,
+    'FORBIDDEN':    7,
+    'NOT_FOUND':    8,
+    'RATE_LIMIT':   9,
+}
+
+
 def validate_user_items(target_username: str, login_username: str = None):
     """Validate all items assigned to target user against PRPL rules."""
     
@@ -139,7 +151,7 @@ def validate_user_items(target_username: str, login_username: str = None):
             print(f"  Login  : {login_username}")
             print(  "  Action : Re-run and enter the correct password.")
             os.environ.pop("RQ1_PASSWORD", None)
-        sys.exit(1)
+        sys.exit(_EXIT_CODES.get(err_type, 1))
     
     # Get user's URI
     print(f"[0] Looking up user {target_username}...")
@@ -165,7 +177,7 @@ def validate_user_items(target_username: str, login_username: str = None):
         print(f"  Reason : {hint}")
         if err_type == 'AUTH':
             os.environ.pop("RQ1_PASSWORD", None)
-        sys.exit(1)
+        sys.exit(_EXIT_CODES.get(err_type, 1))
     
     violations = []
     total_checks = 0
@@ -464,7 +476,7 @@ def validate_user_items(target_username: str, login_username: str = None):
         err_type, hint = _classify_error(e)
         print(f"[ERROR:{err_type}] Failed to validate Issues: {hint}\n")
         if err_type in ('AUTH', 'CONNECTION', 'TIMEOUT', 'SERVER_ERROR'):
-            sys.exit(1)
+            sys.exit(_EXIT_CODES.get(err_type, 1))
     
     # Query Releases and validate BC/BX rules
     print("[2] Querying Releases (all types: BC, BX, FC, PVER, etc.)...")
@@ -707,7 +719,7 @@ def validate_user_items(target_username: str, login_username: str = None):
         err_type, hint = _classify_error(e)
         print(f"[ERROR:{err_type}] Failed to validate Releases: {hint}\n")
         if err_type in ('AUTH', 'CONNECTION', 'TIMEOUT', 'SERVER_ERROR'):
-            sys.exit(1)
+            sys.exit(_EXIT_CODES.get(err_type, 1))
     
     # Query Workitems
     print("[3] Validating Workitems...")
@@ -793,7 +805,7 @@ def validate_user_items(target_username: str, login_username: str = None):
         err_type, hint = _classify_error(e)
         print(f"[ERROR:{err_type}] Failed to validate Workitems: {hint}")
         if err_type in ('AUTH', 'CONNECTION', 'TIMEOUT', 'SERVER_ERROR'):
-            sys.exit(1)
+            sys.exit(_EXIT_CODES.get(err_type, 1))
     
     # Print validation summary
     print(f"{'='*80}")
