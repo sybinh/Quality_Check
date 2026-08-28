@@ -6,6 +6,7 @@ Validate User Items Against PRPL Rules
 Fetch all items assigned to user and validate against implemented rules.
 """
 
+import json
 import os
 import sys
 try:
@@ -90,8 +91,29 @@ _EXIT_CODES = {
 }
 
 
-def validate_user_items(target_username: str, login_username: str = None):
+def validate_user_items(target_username: str, login_username: str = None, output_format: str = 'text') -> dict:
     """Validate all items assigned to target user against PRPL rules."""
+    result = {
+        'user': target_username,
+        'full_name': '',
+        'validated_at': datetime.now().isoformat(timespec='seconds'),
+        'authenticated_as': '',
+        'rules_applied': [],
+        'summary': {
+            'total_items': 0,
+            'items': {
+                'issues': {'total': 0, 'IFD': 0, 'ISW': 0, 'Other': 0},
+                'releases': {'total': 0, 'BC': 0, 'BX': 0, 'FC': 0, 'PVER': 0, 'PVAR': 0, 'Other': 0},
+                'workitems': 0,
+            },
+            'total_checks': 0,
+            'pass_rate': None,
+            'violations_total': 0,
+            'violations_warning': 0,
+            'violations_info': 0,
+        },
+        'violations': [],
+    }
     
     # Get username from environment or prompt
     if not login_username:
@@ -169,6 +191,8 @@ def validate_user_items(target_username: str, login_username: str = None):
         
         user = user_query.members[0]
         user_uri = user.uri
+        result['full_name'] = str(user.fullname)
+        result['authenticated_as'] = login_username
         print(f"[OK] Found: {user.fullname}\n")
         
     except Exception as e:
@@ -181,6 +205,7 @@ def validate_user_items(target_username: str, login_username: str = None):
     
     violations = []
     total_checks = 0
+    workitem_count = 0
     workitem_query = type('obj', (object,), {'members': []})()  # safe default if query fails
 
     # Count items by type
@@ -792,7 +817,8 @@ def validate_user_items(target_username: str, login_username: str = None):
                         'description': result16.description
                     })
         
-        print(f"[OK] Validated {len(workitem_query.members)} Workitems")
+        workitem_count = len(workitem_query.members)
+        print(f"[OK] Validated {workitem_count} Workitems")
         
         # Show detailed list of workitems
         for workitem in workitem_query.members:
@@ -807,80 +833,103 @@ def validate_user_items(target_username: str, login_username: str = None):
         if err_type in ('AUTH', 'CONNECTION', 'TIMEOUT', 'SERVER_ERROR'):
             sys.exit(_EXIT_CODES.get(err_type, 1))
     
-    # Print validation summary
-    print(f"{'='*80}")
-    print(f"VALIDATION SUMMARY")
-    print(f"{'='*80}")
-    total_issues = sum(issue_counts.values())
-    total_releases = sum(release_counts.values())
-    print(f"Total items assigned: {total_issues + total_releases + len(workitem_query.members)}")
-    print(f"  - Issues: {total_issues} ({', '.join([f'{k}={v}' for k, v in issue_counts.items() if v > 0])})")
-    print(f"  - Releases: {total_releases} ({', '.join([f'{k}={v}' for k, v in release_counts.items() if v > 0])})")
-    print(f"  - Workitems: {len(workitem_query.members)}")
-    print(f"Total checks performed: {total_checks}")
+    # Build result dict
     _all_rules = ['PRPL 01', 'PRPL 02', 'PRPL 03', 'PRPL 06', 'PRPL 07',
                   'PRPL 11', 'PRPL 12', 'PRPL 13', 'PRPL 14', 'PRPL 15', 'PRPL 16', 'PRPL 18']
     _active_rules = [r for r in _all_rules if RQ1_ENABLED_RULES is None or r in RQ1_ENABLED_RULES]
-    print(f"Rules applied: {', '.join(r.replace('PRPL ', '') for r in _active_rules)}")
-
-    # Count WARNING violations only (exclude INFO for pass rate calculation)
     warning_violations = [v for v in violations if v.get('severity') == 'WARNING']
     info_violations = [v for v in violations if v.get('severity') == 'INFO']
-    
+    total_issues = sum(issue_counts.values())
+    total_releases = sum(release_counts.values())
+    pass_rate = round((total_checks - len(warning_violations)) / total_checks * 100, 1) if total_checks > 0 else None
+
+    result['rules_applied'] = _active_rules
+    result['summary'].update({
+        'total_items': total_issues + total_releases + workitem_count,
+        'items': {
+            'issues': {'total': total_issues, **issue_counts},
+            'releases': {'total': total_releases, **release_counts},
+            'workitems': workitem_count,
+        },
+        'total_checks': total_checks,
+        'pass_rate': pass_rate,
+        'violations_total': len(violations),
+        'violations_warning': len(warning_violations),
+        'violations_info': len(info_violations),
+    })
+    result['violations'] = [
+        {
+            'index': i,
+            'rule': v['rule'],
+            'rule_id': f"{v['rule']}.00.00",
+            'severity': v.get('severity', ''),
+            'item_id': v.get('item_id', ''),
+            'item_title': v.get('item_title', ''),
+            'description': v.get('description', ''),
+        }
+        for i, v in enumerate(violations, 1)
+    ]
+
+    if output_format == 'json':
+        return result
+
+    # Text output (default)
+    rule_descriptions = {
+        'PRPL 01': 'BC-R is not in requested state, 8 weeks before PVER planned delivery date',
+        'PRPL 02': 'Workitem is in started state, but planned date for workitem is not entered in planning tab',
+        'PRPL 03': 'Issue/Release/workitem is still in "Conflicted" state',
+        'PRPL 06': 'Not all fields for defect detection/injection attributes in a Bug Fix Issue (IFD) are filled',
+        'PRPL 07': 'Planned date of BC later than requested delivery date of any mapped PVER or PVAR',
+        'PRPL 11': 'IFD 5 day SLA reached',
+        'PRPL 12': 'IFD is not closed, even though all the BC-Rs mapped to it are closed or cancelled',
+        'PRPL 13': 'IFD is not implemented or closed, after planned dated of BC-R',
+        'PRPL 14': 'IFD is not committed, eventhough attached Issue-SW is committed',
+        'PRPL 15': 'Release is not closed after planned date',
+        'PRPL 16': 'Workitem is not closed after planned date',
+        'PRPL 18': 'I-FD not committed 5 or more working days after attached I-SW was committed'
+    }
+
+    print(f"{'='*80}")
+    print(f"VALIDATION SUMMARY")
+    print(f"{'='*80}")
+    print(f"Total items assigned: {result['summary']['total_items']}")
+    print(f"  - Issues: {total_issues} ({', '.join([f'{k}={v}' for k, v in issue_counts.items() if v > 0])})")
+    print(f"  - Releases: {total_releases} ({', '.join([f'{k}={v}' for k, v in release_counts.items() if v > 0])})")
+    print(f"  - Workitems: {workitem_count}")
+    print(f"Total checks performed: {total_checks}")
+    print(f"Rules applied: {', '.join(r.replace('PRPL ', '') for r in _active_rules)}")
     print(f"Violations found: {len(violations)} (WARNING: {len(warning_violations)}, INFO: {len(info_violations)})")
-    if total_checks > 0:
-        # Pass rate based on WARNING violations only
-        print(f"Pass rate: {((total_checks - len(warning_violations)) / total_checks * 100):.1f}% (based on WARNING violations)\n")
+    if pass_rate is not None:
+        print(f"Pass rate: {pass_rate:.1f}% (based on WARNING violations)\n")
     else:
         print(f"Pass rate: N/A (no checks performed)\n")
-    
-    # Print violations
+
     if violations:
         print(f"{'='*80}")
         print(f"VIOLATIONS FOUND ({len(violations)})")
         print(f"{'='*80}\n")
-        
-        # Rule descriptions mapping
-        rule_descriptions = {
-            'PRPL 01': 'BC-R is not in requested state, 8 weeks before PVER planned delivery date',
-            'PRPL 02': 'Workitem is in started state, but planned date for workitem is not entered in planning tab',
-            'PRPL 03': 'Issue/Release/workitem is still in "Conflicted" state',
-            'PRPL 06': 'Not all fields for defect detection/injection attributes in a Bug Fix Issue (IFD) are filled',
-            'PRPL 07': 'Planned date of BC later than requested delivery date of any mapped PVER or PVAR',
-            'PRPL 11': 'IFD 5 day SLA reached',
-            'PRPL 12': 'IFD is not closed, even though all the BC-Rs mapped to it are closed or cancelled',
-            'PRPL 13': 'IFD is not implemented or closed, after planned dated of BC-R',
-            'PRPL 14': 'IFD is not committed, eventhough attached Issue-SW is committed',
-            'PRPL 15': 'Release is not closed after planned date',
-            'PRPL 16': 'Workitem is not closed after planned date',
-            'PRPL 18': 'I-FD not committed 5 or more working days after attached I-SW was committed'
-        }
-        
         for i, v in enumerate(violations, 1):
             rule_desc = rule_descriptions.get(v['rule'], 'Unknown rule')
-            rule_id = f"{v['rule']}.00.00"  # Format: PRPL XX.00.00
+            rule_id = f"{v['rule']}.00.00"
             print(f"[{i}] {rule_id} - {v['severity']}")
             print(f"    Rule: {rule_desc}")
             print(f"    Item: {v['item_id']}")
             print(f"    Title: {v['item_title']}")
-            # Print description without extra indentation, skip title line and empty leading lines
             desc_lines = v['description'].split('\n')
             first_line = True
             for line in desc_lines:
-                # Skip line if it's just repeating the title
                 if line.strip().startswith('Title:') and v['item_title'] in line:
                     continue
-                # Skip empty lines at the start
                 if first_line and not line.strip():
                     continue
                 first_line = False
-                # Print with consistent indentation (4 spaces)
                 print(f"    {line}")
             print()
     else:
         print("? No violations found! All items comply with PRPL rules.\n")
-    
+
     print(f"{'='*80}\n")
+    return result
 
 
 if __name__ == "__main__":
@@ -896,7 +945,9 @@ if __name__ == "__main__":
             '  validate_user_items.exe --target_users DAB5HC,TRE5HC\n'
             '  validate_user_items.exe --user DAB5HC --target_users DAB5HC,TRE5HC --project_id RQONE00001940\n'
             '  validate_user_items.exe --user ABC1HC --password MyPass --target_users ABC1HC,DEF2HC\n'
-            '  validate_user_items.exe --rules "PRPL 01,PRPL 11"\n\n'
+            '  validate_user_items.exe --rules "PRPL 01,PRPL 11"\n'
+            '  validate_user_items.exe --target_users DAB5HC --json\n'
+            '  validate_user_items.exe --target_users DAB5HC --output report.json\n\n'
             'All arguments fall back to .env values if not provided:\n'
             '  --user         <- RQ1_USER\n'
             '  --password     <- RQ1_PASSWORD  (prompts if missing)\n'
@@ -925,6 +976,14 @@ if __name__ == "__main__":
         '--rules', metavar='"PRPL XX[,...]"',
         help='Rules to apply (e.g. "PRPL 01,PRPL 11"). Overrides RQ1_RULES in .env.'
     )
+    parser.add_argument(
+        '--json', action='store_true', dest='json_stdout',
+        help='Output validation results as JSON to stdout (suppresses text summary).'
+    )
+    parser.add_argument(
+        '--output', metavar='FILE.json',
+        help='Write validation results as JSON to FILE (text summary still printed).'
+    )
     # Legacy positional arg for backward compatibility
     parser.add_argument(
         'username', nargs='?', metavar='USERNAME',
@@ -945,6 +1004,8 @@ if __name__ == "__main__":
     if args.rules:
         globals()['RQ1_ENABLED_RULES'] = set(r.strip() for r in args.rules.split(',') if r.strip()) or None
 
+    output_format = 'json' if args.json_stdout else 'text'
+
     # Determine targets: --target_users > legacy positional > RQ1_MEMBERS > login user
     if args.target_users:
         targets = [t.strip() for t in args.target_users.split(',') if t.strip()]
@@ -962,4 +1023,11 @@ if __name__ == "__main__":
         targets = [login_user]
 
     for target in targets:
-        validate_user_items(target_username=target)
+        result = validate_user_items(target_username=target, output_format=output_format)
+        if args.output and result:
+            out_path = args.output if len(targets) == 1 else f"{target}_{args.output}"
+            with open(out_path, 'w', encoding='utf-8') as f:
+                json.dump(result, f, indent=2, ensure_ascii=False, default=str)
+            print(f"[JSON] Written to {out_path}")
+        if args.json_stdout and result:
+            print(json.dumps(result, indent=2, ensure_ascii=False, default=str))

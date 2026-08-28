@@ -1,6 +1,6 @@
 ﻿# Quality Check
 
-**Version 1.3** - Automated validation tool for RQ1 PRPL rules, targeting QAM, QAMi and BBM rule sets.
+**Version 1.4** - Automated validation tool for RQ1 PRPL rules, targeting QAM, QAMi and BBM rule sets.
 
 ## Overview
 
@@ -131,6 +131,7 @@ python validate_user_items.py <NTID>
 
 ## Documentation
 
+- `docs/RUNNING_MODES.md` - All running modes: CLI, executable, JSON output, batch, Copilot agent
 - `docs/RULES_COMPLETE.md` - All 101 Excel rules (BBM 23 + QAM 22 + IPT 56)
 - `docs/EXCEL_TO_JAVA_MAPPING.md` - Mapping between Excel rules and Java reference implementation
 - `docs/IMPLEMENTATION_GUIDE.md` - Guide for adding new rules
